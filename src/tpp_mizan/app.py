@@ -50,4 +50,6 @@ def divide_endpoint(x: float, y: float) -> MathResult:
     try:
         return MathResult(operation="divide", x=x, y=y, result=div(x, y))
     except ZeroDivisionError as e:
+        # Added for symmetry with CLI: log client input errors as WARNING
+        logger.warning("API division error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from None

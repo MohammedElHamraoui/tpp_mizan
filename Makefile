@@ -42,14 +42,16 @@ typecheck: ## Run mypy type checking
 	uv run mypy .
 
 # --- CI/CD ---
-ci-check: format-check typecheck test ## Run all CI checks locally (non-mutating)
+# Changed 'test' to 'test-cov' to enforce the 80% coverage gate in CI
+ci-check: format-check typecheck test-cov ## Run all CI checks locally (non-mutating, enforces 80% coverage)
 
 # --- Testing ---
 test: ## Run tests with pytest
 	uv run pytest -v
 
-test-cov: ## Run tests with coverage report (fails if < 80%)
-	uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
+# Removed redundant '--cov-fail-under=80' flag; it is now centrally managed in pyproject.toml
+test-cov: ## Run tests with coverage report (fails if < 80%, see pyproject.toml)
+	uv run pytest --cov --cov-report=term-missing
 
 # --- Execution ---
 # Define default values that can be overridden from the command line
@@ -72,11 +74,15 @@ run-api: ## Run the FastAPI application with hot-reloading
 	uv run uvicorn tpp_mizan.app:app --reload --host 127.0.0.1 --port 8000
 
 # --- Maintenance ---
-clean: ## Clean up caches and virtual environments
-	rm -rf .venv .pytest_cache .mypy_cache .ruff_cache .coverage dist build
+clean: ## Clean up caches and build artifacts (keeps .venv intact)
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage dist build
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	uv cache clean
 
+clean-venv: ## Remove the virtual environment
+	rm -rf .venv
+	@echo "Virtual environment removed. Run 'make install' to recreate it."
+	
 deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 	rm -rf logs/
 	rm -f tpp_mizan.txt
@@ -86,12 +92,12 @@ deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 # --- Packaging ---
 build: ## Build wheel + sdist
 	uv build
-	
+
 # --- LLM ---
 context: ## Export project source to tpp_mizan.txt for LLM feedback (includes auto-generated tree)
 	@echo "Generating LLM context file..."
 	@echo "========== PROJECT STRUCTURE ==========" > tpp_mizan.txt
-	@tree -I '.venv|.git|logs|.pytest_cache|.mypy_cache|.ruff_cache|dist|build|htmlcov|__pycache__' --dirsfirst >> tpp_mizan.txt 2>/dev/null || echo "(tree command not found, skipping structure map)" >> tpp_mizan.txt
+	@tree -I '.venv|.git|logs|.pytest_cache|.mypy_cache|.ruff_cache|dist|build|htmlcov|__pycache__|tpp_mizan.txt' --dirsfirst >> tpp_mizan.txt 2>/dev/null || echo "(tree command not found, skipping structure map)" >> tpp_mizan.txt
 	@echo "" >> tpp_mizan.txt
 	@find . -type f \
 		\( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "*.yml" \
@@ -106,7 +112,7 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback (includes au
 			echo ""; \
 		done >> tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
-		
+
 rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
 	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
 		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi

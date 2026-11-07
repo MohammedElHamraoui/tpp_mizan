@@ -1,5 +1,7 @@
 # TPP Mizan
 
+[![CI](https://github.com/MohammedElHamraoui/tpp_mizan/actions/workflows/ci.yml/badge.svg)](https://github.com/MohammedElHamraoui/tpp_mizan/actions/workflows/ci.yml)
+
 A production-ready Python template from Tech Print Pack featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by `uv`.
 
 ## ✨ Features

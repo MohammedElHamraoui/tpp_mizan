@@ -91,7 +91,3 @@ def divide_cmd(
         logger.warning("CLI division error: %s", e)
         typer.echo("Error: Division by zero.", err=True)
         raise typer.Exit(code=1) from None
-
-
-if __name__ == "__main__":
-    app()

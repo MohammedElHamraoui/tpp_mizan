@@ -246,11 +246,12 @@ version = "0.1.0"
 description = "A production-ready Python template featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by uv"
 readme = "README.md"
 license = { text = "MIT" }
+requires-python = ">=3.13"  # <-- Add this line back!
 keywords = ["template", "fastapi", "typer", "uv", "json-logging", "math"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    # "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
@@ -661,10 +662,12 @@ except PackageNotFoundError:
 
 ========== ./src/tpp_mizan/__main__.py ==========
 """Allow running tpp_mizan as a module: python -m tpp_mizan."""
+
 from tpp_mizan.cli import app
 
 if __name__ == "__main__":
     app()
+
 ========== ./src/tpp_mizan/schemas.py ==========
 # src/tpp_mizan/schemas.py
 from typing import Literal
