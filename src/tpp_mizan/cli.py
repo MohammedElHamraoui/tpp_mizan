@@ -76,7 +76,7 @@ def multiply_cmd(
 
 
 @app.command(name="divide")
-def divide(
+def divide_cmd(
     x: float = typer.Argument(..., help="The numerator"),
     y: float = typer.Argument(..., help="The denominator"),
 ) -> None:

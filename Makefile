@@ -1,5 +1,5 @@
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install add add-dev remove lock format format-check lint \
+.PHONY: help sync install add add-dev remove lock format format-check typecheck \
         test test-cov run run-add run-subtract run-multiply run-api build \
         clean deep-clean context ci-check rename
 
@@ -38,18 +38,18 @@ format-check: ## Check formatting without mutating (for CI)
 	uv run ruff format --check .
 	uv run ruff check .
 
-lint: ## Lint code using Mypy
+typecheck: ## Run mypy type checking
 	uv run mypy .
 
 # --- CI/CD ---
-ci-check: format-check lint test ## Run all CI checks locally (non-mutating)
+ci-check: format-check typecheck test ## Run all CI checks locally (non-mutating)
 
 # --- Testing ---
 test: ## Run tests with pytest
 	uv run pytest -v
 
-test-cov: ## Run tests with coverage report
-	uv run pytest --cov --cov-report=term-missing
+test-cov: ## Run tests with coverage report (fails if < 80%)
+	uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
 
 # --- Execution ---
 # Define default values that can be overridden from the command line
@@ -88,11 +88,14 @@ build: ## Build wheel + sdist
 	uv build
 	
 # --- LLM ---
-context: ## Export project source to tpp_mizan.txt for LLM feedback
+context: ## Export project source to tpp_mizan.txt for LLM feedback (includes auto-generated tree)
 	@echo "Generating LLM context file..."
+	@echo "========== PROJECT STRUCTURE ==========" > tpp_mizan.txt
+	@tree -I '.venv|.git|logs|.pytest_cache|.mypy_cache|.ruff_cache|dist|build|htmlcov|__pycache__' --dirsfirst >> tpp_mizan.txt 2>/dev/null || echo "(tree command not found, skipping structure map)" >> tpp_mizan.txt
+	@echo "" >> tpp_mizan.txt
 	@find . -type f \
 		\( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "*.yml" \
-		   -o -name "Makefile" -o -name ".gitignore" \) \
+		   -o -name "Makefile" -o -name ".gitignore" -o -name "LICENSE*" \) \
 		-not -path "./.venv/*" -not -path "./.git/*" -not -path "./logs/*" \
 		-not -path "./.pytest_cache/*" -not -path "./.mypy_cache/*" -not -path "./.ruff_cache/*" \
 		-not -path "./dist/*" -not -path "./build/*" -not -path "./htmlcov/*" \
@@ -101,9 +104,9 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback
 			echo "========== $$f =========="; \
 			cat "$$f"; \
 			echo ""; \
-		done > tpp_mizan.txt
+		done >> tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
-	
+		
 rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
 	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
 		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi

@@ -36,6 +36,14 @@ A production-ready Python template from Tech Print Pack featuring FastAPI REST A
    make ci-check
    ```
 
+## ⚙️ Environment Variables
+You can configure the application by setting these variables in your shell or a `.env` file:
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Sets the logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `TPP_MIZAN_LOG_DIR` | `./logs` | Overrides the directory where JSON and timed log files are written. |
+
 ## 🛠️ Development
 - Add a dependency: `make add PKG=requests`
 - Add a dev dependency: `make add-dev PKG=httpx2`

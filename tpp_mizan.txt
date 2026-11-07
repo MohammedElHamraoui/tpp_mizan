@@ -1,21 +1,56 @@
+========== PROJECT STRUCTURE ==========
+.
+├── src
+│   └── tpp_mizan
+│       ├── config
+│       │   └── my_log.yaml
+│       ├── core
+│       │   ├── logging.py
+│       │   └── math_ops.py
+│       ├── app.py
+│       ├── cli.py
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── py.typed
+│       └── schemas.py
+├── tests
+│   ├── tpp_mizan
+│   │   ├── core
+│   │   │   └── test_math_ops.py
+│   │   ├── test_app.py
+│   │   └── test_cli.py
+│   └── conftest.py
+├── LICENSE
+├── Makefile
+├── pyproject.toml
+├── README.md
+├── tpp_mizan.txt
+└── uv.lock
+
+8 directories, 19 files
+
 ========== ./.github/workflows/ci.yml ==========
 name: CI
 
 on:
-  push:
-    branches: [ "main" ] 
-  pull_request:
-    branches: [ "main" ]
+  push: { branches: ["main"] }
+  pull_request: { branches: ["main"] }
+
+permissions:
+  contents: read  # Principle of least privilege
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevents hung jobs from burning CI minutes
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
-        
+        with:
+          python-version: "3.13"  # Pin Python explicitly; don't rely on ubuntu-latest defaults
+      
       - name: Install dependencies
         run: uv sync --dev
         
@@ -78,7 +113,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ========== ./Makefile ==========
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install add add-dev remove lock format format-check lint \
+.PHONY: help sync install add add-dev remove lock format format-check typecheck \
         test test-cov run run-add run-subtract run-multiply run-api build \
         clean deep-clean context ci-check rename
 
@@ -117,18 +152,18 @@ format-check: ## Check formatting without mutating (for CI)
 	uv run ruff format --check .
 	uv run ruff check .
 
-lint: ## Lint code using Mypy
+typecheck: ## Run mypy type checking
 	uv run mypy .
 
 # --- CI/CD ---
-ci-check: format-check lint test ## Run all CI checks locally (non-mutating)
+ci-check: format-check typecheck test ## Run all CI checks locally (non-mutating)
 
 # --- Testing ---
 test: ## Run tests with pytest
 	uv run pytest -v
 
-test-cov: ## Run tests with coverage report
-	uv run pytest --cov --cov-report=term-missing
+test-cov: ## Run tests with coverage report (fails if < 80%)
+	uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
 
 # --- Execution ---
 # Define default values that can be overridden from the command line
@@ -167,8 +202,11 @@ build: ## Build wheel + sdist
 	uv build
 	
 # --- LLM ---
-context: ## Export project source to tpp_mizan.txt for LLM feedback
+context: ## Export project source to tpp_mizan.txt for LLM feedback (includes auto-generated tree)
 	@echo "Generating LLM context file..."
+	@echo "========== PROJECT STRUCTURE ==========" > tpp_mizan.txt
+	@tree -I '.venv|.git|logs|.pytest_cache|.mypy_cache|.ruff_cache|dist|build|htmlcov|__pycache__' --dirsfirst >> tpp_mizan.txt 2>/dev/null || echo "(tree command not found, skipping structure map)" >> tpp_mizan.txt
+	@echo "" >> tpp_mizan.txt
 	@find . -type f \
 		\( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "*.yml" \
 		   -o -name "Makefile" -o -name ".gitignore" -o -name "LICENSE*" \) \
@@ -180,9 +218,9 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback
 			echo "========== $$f =========="; \
 			cat "$$f"; \
 			echo ""; \
-		done > tpp_mizan.txt
+		done >> tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
-
+		
 rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
 	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
 		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi
@@ -223,7 +261,7 @@ authors = [
 dependencies = [
     "fastapi>=0.162.0",
     "python-dotenv>=1.2.4",
-    "python-json-logger>=4.2.0",
+    "python-json-logger>=4.2.0,<5",
     "pyyaml>=6.0.3",
     "typer>=0.28.0",
     "uvicorn>=0.54.0",
@@ -262,8 +300,8 @@ exclude = ["^tests/"]
 # Only ignore missing imports for specific third-party libraries that lack stubs
 [[tool.mypy.overrides]]
 module = [
-    "yaml",                  # PyYAML (though types-pyyaml is installed, this is a safe fallback)
-    "pythonjsonlogger.*",    # python-json-logger
+    "yaml",               # PyYAML (though types-pyyaml is installed, this is a safe fallback)
+    "pythonjsonlogger.*", # python-json-logger
 ]
 ignore_missing_imports = true
 
@@ -274,6 +312,10 @@ addopts = "-ra --strict-markers"
 [tool.coverage.run]
 source = ["tpp_mizan"]
 omit = ["*/tests/*"]
+
+# Add this new section at the bottom:
+[tool.coverage.report]
+fail_under = 80 # <-- CI will fail if coverage drops below 80%
 
 ========== ./README.md ==========
 # TPP Mizan
@@ -313,6 +355,14 @@ A production-ready Python template from Tech Print Pack featuring FastAPI REST A
    ```bash
    make ci-check
    ```
+
+## ⚙️ Environment Variables
+You can configure the application by setting these variables in your shell or a `.env` file:
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Sets the logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `TPP_MIZAN_LOG_DIR` | `./logs` | Overrides the directory where JSON and timed log files are written. |
 
 ## 🛠️ Development
 - Add a dependency: `make add PKG=requests`
@@ -454,7 +504,7 @@ def multiply_cmd(
 
 
 @app.command(name="divide")
-def divide(
+def divide_cmd(
     x: float = typer.Argument(..., help="The numerator"),
     y: float = typer.Argument(..., help="The denominator"),
 ) -> None:
@@ -572,35 +622,28 @@ def configure_loggers() -> None:
 
 ========== ./src/tpp_mizan/core/math_ops.py ==========
 # src/tpp_mizan/core/math_ops.py
-import logging
-
-logger = logging.getLogger(__name__)
+# Removed logger import and instantiation since we no longer need it here.
 
 
 def add(x: float, y: float) -> float:
     """Add x and y."""
-    logger.info("Performing addition: %s + %s", x, y)
     return x + y
 
 
 def subtract(x: float, y: float) -> float:
     """Subtract y from x."""
-    logger.info("Performing subtraction: %s - %s", x, y)
     return x - y
 
 
 def multiply(x: float, y: float) -> float:
     """Multiply x by y."""
-    logger.info("Performing multiplication: %s * %s", x, y)
     return x * y
 
 
 def div(x: float, y: float) -> float:
     """Divide x by y. Raises ZeroDivisionError if y is 0."""
     if y == 0:
-        # Pure function: no logging, just raise the domain exception
         raise ZeroDivisionError("Cannot divide by zero")
-    logger.info("Performing division: %s / %s", x, y)
     return x / y
 
 ========== ./src/tpp_mizan/__init__.py ==========
@@ -617,11 +660,11 @@ except PackageNotFoundError:
     __version__ = "0.1.0"
 
 ========== ./src/tpp_mizan/__main__.py ==========
+"""Allow running tpp_mizan as a module: python -m tpp_mizan."""
 from tpp_mizan.cli import app
 
 if __name__ == "__main__":
     app()
-
 ========== ./src/tpp_mizan/schemas.py ==========
 # src/tpp_mizan/schemas.py
 from typing import Literal

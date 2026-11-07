@@ -19,7 +19,7 @@ authors = [
 dependencies = [
     "fastapi>=0.162.0",
     "python-dotenv>=1.2.4",
-    "python-json-logger>=4.2.0",
+    "python-json-logger>=4.2.0,<5",
     "pyyaml>=6.0.3",
     "typer>=0.28.0",
     "uvicorn>=0.54.0",
@@ -58,8 +58,8 @@ exclude = ["^tests/"]
 # Only ignore missing imports for specific third-party libraries that lack stubs
 [[tool.mypy.overrides]]
 module = [
-    "yaml",                  # PyYAML (though types-pyyaml is installed, this is a safe fallback)
-    "pythonjsonlogger.*",    # python-json-logger
+    "yaml",               # PyYAML (though types-pyyaml is installed, this is a safe fallback)
+    "pythonjsonlogger.*", # python-json-logger
 ]
 ignore_missing_imports = true
 
@@ -70,3 +70,7 @@ addopts = "-ra --strict-markers"
 [tool.coverage.run]
 source = ["tpp_mizan"]
 omit = ["*/tests/*"]
+
+# Add this new section at the bottom:
+[tool.coverage.report]
+fail_under = 80 # <-- CI will fail if coverage drops below 80%
