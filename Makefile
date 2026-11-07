@@ -1,5 +1,5 @@
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install test lint format run build clean deep-clean context
+.PHONY: help sync install test lint format run run-api build clean deep-clean context add add-dev
 
 # Default target
 help: ## Show this help message
@@ -17,6 +17,9 @@ install: sync ## Ensure project is installed (runs sync)
 
 add: ## Add a new dependency (Usage: make add PKG=requests)
 	uv add $(PKG)
+
+add-dev: ## Add a dev dependency (Usage: make add-dev PKG=httpx2)
+	uv add --dev $(PKG)
 
 remove: ## Remove a dependency (Usage: make remove PKG=requests)
 	uv remove $(PKG)
@@ -41,8 +44,15 @@ test-cov: ## Run tests with coverage report
 	uv run pytest --cov --cov-report=term-missing
 
 # --- Execution ---
-run: ## Run the main application
-	uv run python src/main.py
+# Define default values that can be overridden from the command line
+X ?= 10
+Y ?= 2
+
+run: ## Run the main CLI application (Usage: make run X=5 Y=2)
+	uv run my-divide $(X) $(Y)
+
+run-api: ## Run the FastAPI application with hot-reloading
+	uv run uvicorn my_project.app:app --reload --host 127.0.0.1 --port 8000
 
 # --- Maintenance ---
 clean: ## Clean up caches and virtual environments

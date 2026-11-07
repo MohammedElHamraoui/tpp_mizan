@@ -19,9 +19,15 @@ def configure_loggers():
     log_dir = project_root / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     config["handlers"]["json_file"]["filename"] = str(log_dir / "my_project.json.log")
+    config["handlers"]["timed_file"]["filename"] = str(
+        log_dir / "my_project_timed.log"
+    )  # <-- Added this
 
     # Override log level from env
     env_log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
     config["loggers"]["my_project"]["level"] = env_log_level
+
+    # Also override console handler level
+    config["handlers"]["c_handler"]["level"] = env_log_level
 
     logging.config.dictConfig(config)

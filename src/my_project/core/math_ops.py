@@ -4,10 +4,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def div(x: float, y: float) -> float | None:
-    """Divide function"""
-    try:
-        return x / y
-    except ZeroDivisionError:
-        logger.exception("A math error occurred: Division by zero!")
-        return None
+def div(x: float, y: float) -> float:
+    """Divide x by y. Raises ZeroDivisionError if y is 0."""
+    if y == 0:
+        logger.error("A math error occurred: Division by zero!")
+        raise ZeroDivisionError("Cannot divide by zero")
+    return x / y

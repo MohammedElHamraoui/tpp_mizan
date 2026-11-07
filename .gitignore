@@ -1,16 +1,31 @@
-# Ignore environment variables file
-.env
 
-# Ignore logs directory
-logs/
-
-# Python-generated files
+# Byte-compiled / optimized files
 __pycache__/
-*.py[oc]
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
 build/
 dist/
-wheels/
-*.egg-info
+*.egg-info/
 
-# Virtual environments
-.venv
+# Environments
+.venv/
+venv/
+env/
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+logs/
+my_project.txt
+.env

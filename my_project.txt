@@ -1,6 +1,6 @@
 ========== ./Makefile ==========
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install test lint format run build clean deep-clean context
+.PHONY: help sync install test lint format run run-api build clean deep-clean context add add-dev
 
 # Default target
 help: ## Show this help message
@@ -18,6 +18,9 @@ install: sync ## Ensure project is installed (runs sync)
 
 add: ## Add a new dependency (Usage: make add PKG=requests)
 	uv add $(PKG)
+
+add-dev: ## Add a dev dependency (Usage: make add-dev PKG=httpx2)
+	uv add --dev $(PKG)
 
 remove: ## Remove a dependency (Usage: make remove PKG=requests)
 	uv remove $(PKG)
@@ -42,8 +45,15 @@ test-cov: ## Run tests with coverage report
 	uv run pytest --cov --cov-report=term-missing
 
 # --- Execution ---
-run: ## Run the main application
-	uv run python src/main.py
+# Define default values that can be overridden from the command line
+X ?= 10
+Y ?= 2
+
+run: ## Run the main CLI application (Usage: make run X=5 Y=2)
+	uv run my-divide $(X) $(Y)
+
+run-api: ## Run the FastAPI application with hot-reloading
+	uv run uvicorn my_project.app:app --reload --host 127.0.0.1 --port 8000
 
 # --- Maintenance ---
 clean: ## Clean up caches and virtual environments
@@ -71,6 +81,7 @@ context: ## Export project source to my_project.txt for LLM feedback
 			echo ""; \
 		done > my_project.txt
 	@echo "Done! Saved to my_project.txt ($$(wc -l < my_project.txt) lines, $$(du -h my_project.txt | cut -f1))"
+
 ========== ./pyproject.toml ==========
 [project]
 name = "my-project"
@@ -86,37 +97,107 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-json-logger>=4.2.0",
     "pyyaml>=6.0.3",
+    "typer>=0.0.15.0",
     "uvicorn>=0.54.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.9.0",
+    "mypy>=1.13.0",
+    "types-pyyaml>=6.0.12.20261103",
+    "httpx2>=2.16.0",
+]
+
 [project.scripts]
-my-cli-tool = "my_project.cli:main"
-my-divide = "my_project.main:run"
+my-divide = "my_project.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
 
+========== ./.pytest_cache/README.md ==========
+# pytest cache directory #
+
+This directory contains data from the pytest's cache plugin,
+which provides the `--lf` and `--ff` options, as well as the `cache` fixture.
+
+**Do not** commit this to version control.
+
+See [the docs](https://docs.pytest.org/en/stable/how-to/cache.html) for more information.
+
 ========== ./README.md ==========
 
 ========== ./src/my_project/app.py ==========
 # src/my_project/app.py
-from fastapi import FastAPI
+import logging
 
-app = FastAPI()
+from fastapi import FastAPI, HTTPException
+
+from my_project.core.logging import configure_loggers
+from my_project.core.math_ops import div
+
+# Initialize logging when the API module is loaded
+logger = logging.getLogger(__name__)
+configure_loggers()
+
+
+app = FastAPI(title="My Project API")
 
 
 @app.get("/")
 def read_root():
-    return {"Hello": "World"}
+    logger.info("Root endpoint accessed")
+    return {"message": "Welcome to My Project API"}
+
+
+@app.get("/divide/{x}/{y}")
+def divide(x: float, y: float):
+    logger.info("API request: divide %s by %s", x, y)
+    try:
+        result = div(x, y)
+        return {"x": x, "y": y, "result": result}
+    except ZeroDivisionError as e:
+        logger.error("API error: %s", e)
+        # Return a proper HTTP 400 error instead of a 500 server crash
+        raise HTTPException(status_code=400, detail=str(e))
 
 ========== ./src/my_project/cli.py ==========
-def main():
-    print("Hello from my_test_project CLI!")
+# src/my_project/cli.py
+import logging
+
+import typer
+
+from my_project.core.logging import configure_loggers
+from my_project.core.math_ops import div
+
+# Initialize logging when the CLI starts
+configure_loggers()
+logger = logging.getLogger(__name__)
+
+app = typer.Typer(help="A simple division CLI tool.")
+
+
+@app.command()
+def divide(
+    x: float = typer.Argument(..., help="The numerator"),
+    y: float = typer.Argument(..., help="The denominator"),
+):
+    """Divide X by Y."""
+    logger.info("CLI request: divide %s by %s", x, y)  # <-- Add this
+    try:
+        result = div(x, y)
+        logger.info("CLI success: %s / %s = %s", x, y, result)  # <-- Add this
+        typer.echo(f"Result: {x} / {y} = {result}")
+    except ZeroDivisionError as e:
+        logger.error("CLI error: %s", e)  # <-- Add this
+        typer.echo("Error: Division by zero.", err=True)
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
-    main()
+    app()
 
 ========== ./src/my_project/config/my_log.yaml ==========
 version: 1
@@ -149,7 +230,7 @@ handlers:
   timed_file:
     formatter: file_formatter
     class: logging.handlers.TimedRotatingFileHandler
-    filename: logs/my_project_timed.log
+    # filename: logs/my_project_timed.log
     when: midnight
     interval: 1  # 1 day
     backupCount: 30 # 30 days
@@ -162,88 +243,128 @@ loggers:
     level: DEBUG    # Will be overridden by LOG_LEVEL env var in main.py
     handlers: [c_handler, json_file, timed_file]
     propagate: false # Good practice: stop it from bubbling to root
-========== ./src/my_project/__init__.py ==========
-def main() -> None:
-    print("Hello from my-project!")
-
-========== ./src/my_project/main.py ==========
+========== ./src/my_project/core/logging.py ==========
+# src/my_project/core/logging.py
 import logging
 import logging.config
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 from yaml import safe_load
 
-# 1. Load environment variables from the .env file at project root
-load_dotenv()
+
+def configure_loggers():
+    package_dir = Path(__file__).resolve().parent.parent
+    config_path = package_dir / "config" / "my_log.yaml"
+
+    with open(config_path) as f:
+        config = safe_load(f)
+
+    # Dynamically set log path to project root
+    project_root = package_dir.parent.parent
+    log_dir = project_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    config["handlers"]["json_file"]["filename"] = str(log_dir / "my_project.json.log")
+    config["handlers"]["timed_file"]["filename"] = str(
+        log_dir / "my_project_timed.log"
+    )  # <-- Added this
+
+    # Override log level from env
+    env_log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    config["loggers"]["my_project"]["level"] = env_log_level
+
+    # Also override console handler level
+    config["handlers"]["c_handler"]["level"] = env_log_level
+
+    logging.config.dictConfig(config)
+
+========== ./src/my_project/core/math_ops.py ==========
+# src/my_project/core/math_ops.py
+import logging
 
 logger = logging.getLogger(__name__)
 
 
-def configure_loggers():
-    # 1. Get the directory where THIS python file lives (src/my_project/)
-    package_dir = Path(__file__).resolve().parent
+def div(x: float, y: float) -> float:
+    """Divide x by y. Raises ZeroDivisionError if y is 0."""
+    if y == 0:
+        logger.error("A math error occurred: Division by zero!")
+        raise ZeroDivisionError("Cannot divide by zero")
+    return x / y
 
-    # 2. Point directly to the config folder next to it
-    config_path = package_dir / "config" / "my_log.yaml"
+========== ./src/my_project/__init__.py ==========
+# src/my_project/__init__.py
+"""My Project: A FastAPI and CLI application."""
 
-    # 3. Load the YAML
-    with open(config_path) as f:
-        config = safe_load(f)
+from importlib.metadata import PackageNotFoundError, version
 
-    # 4. Dynamically set the log file path to a root-level 'logs' folder
-    project_root = package_dir.parent.parent
-    log_dir = project_root / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)  # Creates 'logs' if it doesn't exist
+try:
+    # Reads the version directly from pyproject.toml
+    __version__ = version("my-project")
+except PackageNotFoundError:
+    # Fallback if the package is run directly without being installed
+    __version__ = "0.1.0"
 
-    # Inject the absolute path into the config
-    config["handlers"]["json_file"]["filename"] = str(log_dir / "my_project.json.log")
+========== ./tests/my_project/core/test_math_ops.py ==========
+# tests/my_project/core/test_math_ops.py
+import pytest
 
-    # 5. Dynamically override log level from environment (defaults to DEBUG)
-    env_log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
-    config["loggers"]["my_project"]["level"] = env_log_level
-
-    # 6. Apply configuration
-    logging.config.dictConfig(config)
-    logger.info(f"Logging configured. Level: {env_log_level}")
-
-
-def main():
-    x = input("What's x? ")
-    if not is_numeric_string(x):
-        logger.warning("%s is not a number", x)
-        return
-
-    y = input("What's y? ")
-    if not is_numeric_string(y):
-        logger.warning("%s is not a number", y)
-        return
-
-    result = div(float(x), float(y))
-    if result is not None:
-        logger.info("Div: %s / %s = %s", x, y, result)
+from my_project.core.math_ops import div
 
 
-def div(x, y):
-    """Divide function"""
-    try:
-        return x / y
-    except ZeroDivisionError:
-        # logger.exception automatically logs the full traceback!
-        logger.exception("A math error occurred: Division by zero!")
-        return None
+def test_div_success():
+    assert div(10.0, 2.0) == 5.0
 
 
-def is_numeric_string(val):
-    try:
-        float(val)
-        return True
-    except ValueError:
-        return False
+def test_div_by_zero():
+    # Verify that calling div with 0 raises a ZeroDivisionError
+    with pytest.raises(ZeroDivisionError, match="Cannot divide by zero"):
+        div(10.0, 0.0)
+
+========== ./tests/my_project/test_app.py ==========
+# tests/test_app.py
+from fastapi.testclient import TestClient
+
+from my_project.app import app
+
+client = TestClient(app)
 
 
-def run():
-    configure_loggers()
-    main()
+def test_read_root():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Welcome to My Project API"}
+
+
+def test_api_divide_success():
+    response = client.get("/divide/10.0/2.0")
+    assert response.status_code == 200
+    assert response.json() == {"x": 10.0, "y": 2.0, "result": 5.0}
+
+
+def test_api_divide_by_zero():
+    response = client.get("/divide/10.0/0.0")
+    # Verify it returns HTTP 400, not 500
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Cannot divide by zero"
+
+========== ./tests/my_project/test_cli.py ==========
+# tests/my_project/test_cli.py
+from typer.testing import CliRunner
+
+from my_project.cli import app
+
+runner = CliRunner()  # No special parameters needed
+
+
+def test_cli_divide_success():
+    result = runner.invoke(app, ["10", "2"])
+    assert result.exit_code == 0
+    assert "Result: 10.0 / 2.0 = 5.0" in result.output  # Changed to .output
+
+
+def test_cli_divide_by_zero():
+    result = runner.invoke(app, ["10", "0"])
+    assert result.exit_code == 1
+    assert "Error: Division by zero." in result.output  # Changed to .output
 
