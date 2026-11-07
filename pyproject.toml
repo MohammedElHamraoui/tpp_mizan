@@ -1,7 +1,7 @@
 [project]
-name = "my-project"
+name = "tpp-mizan"
 version = "0.1.0"
-description = "Add your description here"
+description = "A production-ready Python template featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by uv"
 readme = "README.md"
 authors = [
     { name = "Mohammed El Hamraoui", email = "92893757+MohammedElHamraoui@users.noreply.github.com" },
@@ -26,7 +26,7 @@ dev = [
 ]
 
 [project.scripts]
-my-divide = "my_project.cli:app"
+my-divide = "tpp_mizan.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]

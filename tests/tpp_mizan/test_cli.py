@@ -1,7 +1,7 @@
-# tests/my_project/test_cli.py
+# tests/tpp_mizan/test_cli.py
 from typer.testing import CliRunner
 
-from my_project.cli import app
+from tpp_mizan.cli import app
 
 runner = CliRunner()  # No special parameters needed
 

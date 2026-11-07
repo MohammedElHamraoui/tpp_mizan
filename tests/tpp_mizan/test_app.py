@@ -1,7 +1,7 @@
 # tests/test_app.py
 from fastapi.testclient import TestClient
 
-from my_project.app import app
+from tpp_mizan.app import app
 
 client = TestClient(app)
 

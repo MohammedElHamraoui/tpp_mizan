@@ -1,10 +1,10 @@
-# src/my_project/cli.py
+# src/tpp_mizan/cli.py
 import logging
 
 import typer
 
-from my_project.core.logging import configure_loggers
-from my_project.core.math_ops import div
+from tpp_mizan.core.logging import configure_loggers
+from tpp_mizan.core.math_ops import div
 
 # Initialize logging when the CLI starts
 configure_loggers()

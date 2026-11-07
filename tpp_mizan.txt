@@ -1,6 +1,6 @@
 ========== ./Makefile ==========
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install test lint format run run-api build clean deep-clean context add add-dev
+.PHONY: help sync install test lint format run run-api build clean deep-clean context add add-dev rename
 
 # Default target
 help: ## Show this help message
@@ -53,7 +53,7 @@ run: ## Run the main CLI application (Usage: make run X=5 Y=2)
 	uv run my-divide $(X) $(Y)
 
 run-api: ## Run the FastAPI application with hot-reloading
-	uv run uvicorn my_project.app:app --reload --host 127.0.0.1 --port 8000
+	uv run uvicorn tpp_mizan.app:app --reload --host 127.0.0.1 --port 8000
 
 # --- Maintenance ---
 clean: ## Clean up caches and virtual environments
@@ -63,7 +63,7 @@ clean: ## Clean up caches and virtual environments
 
 deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 	rm -rf logs/
-	rm -f my_project.txt
+	rm -f tpp_mizan.txt
 	rm -f uv.lock
 	@echo "Deep clean complete. (Next 'make install' will re-resolve dependencies)"
 
@@ -71,7 +71,7 @@ deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 ci-check: format lint test ## Run all CI checks locally
 
 # --- LLM ---
-context: ## Export project source to my_project.txt for LLM feedback
+context: ## Export project source to tpp_mizan.txt for LLM feedback
 	@echo "Generating LLM context file..."
 	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "Makefile" \) \
 		-not -path "./.venv/*" -not -path "./logs/*" -not -path "./.git/*" \
@@ -79,12 +79,30 @@ context: ## Export project source to my_project.txt for LLM feedback
 			echo "========== $$f =========="; \
 			cat "$$f"; \
 			echo ""; \
-		done > my_project.txt
-	@echo "Done! Saved to my_project.txt ($$(wc -l < my_project.txt) lines, $$(du -h my_project.txt | cut -f1))"
+		done > tpp_mizan.txt
+	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
 
+rename: ## Rename the project (Usage: make rename NEW_NAME=tpp_mizan)
+	@if [ -z "$(NEW_NAME)" ]; then \
+		echo "Error: NEW_NAME is required. Usage: make rename NEW_NAME=tpp_mizan"; \
+		exit 1; \
+	fi
+	@echo "Renaming project to '$(NEW_NAME)' (project: tpp-mizan)..."
+	# 1. Update pyproject.toml project name (uses hyphens per PEP 621)
+	@sed -i 's/name = "tpp-mizan"/name = "tpp-mizan"/' pyproject.toml
+	# 2. Rename source and test directories (uses underscores for Python imports)
+	@if [ -d "src/tpp_mizan" ]; then mv src/tpp_mizan src/$(NEW_NAME); fi
+	@if [ -d "tests/tpp_mizan" ]; then mv tests/tpp_mizan tests/$(NEW_NAME); fi
+	# 3. Replace all internal module references (tpp_mizan -> tpp_mizan)
+	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.yaml" -o -name "Makefile" -o -name "*.md" \) \
+		-not -path "./.venv/*" -not -path "./.git/*" -exec sed -i "s/tpp_mizan/$(NEW_NAME)/g" {} +
+	# 4. Replace all internal project name references (tpp-mizan -> tpp-mizan)
+	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.yaml" -o -name "Makefile" -o -name "*.md" \) \
+		-not -path "./.venv/*" -not -path "./.git/*" -exec sed -i "s/tpp-mizan/tpp-mizan/g" {} +
+	@echo "✅ Rename complete! Run 'make deep-clean && make install' to rebuild the environment."
 ========== ./pyproject.toml ==========
 [project]
-name = "my-project"
+name = "tpp-mizan"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -97,7 +115,7 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-json-logger>=4.2.0",
     "pyyaml>=6.0.3",
-    "typer>=0.0.15.0",
+    "typer>=0.15.0",  # Changed from 0.28.0
     "uvicorn>=0.54.0",
 ]
 
@@ -111,7 +129,7 @@ dev = [
 ]
 
 [project.scripts]
-my-divide = "my_project.cli:app"
+my-divide = "tpp_mizan.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
@@ -128,15 +146,54 @@ which provides the `--lf` and `--ff` options, as well as the `cache` fixture.
 See [the docs](https://docs.pytest.org/en/stable/how-to/cache.html) for more information.
 
 ========== ./README.md ==========
+# My Project
 
-========== ./src/my_project/app.py ==========
-# src/my_project/app.py
+A modern, production-ready Python template featuring FastAPI, Typer CLI, and structured JSON logging, managed by `uv`.
+
+## ✨ Features
+- ⚡ **Ultra-fast dependency management** with `uv`
+- 🚀 **FastAPI** for high-performance, auto-documented REST APIs
+- 💻 **Typer** for type-safe, intuitive CLI tools
+- 📝 **Structured JSON Logging** with dynamic path resolution and log rotation
+- ✅ **Bulletproof CI/CD** via `make ci-check` (Ruff, Mypy, Pytest)
+
+## 🚀 Quick Start
+
+1. **Install dependencies**:
+   ```bash
+   make install
+   ```
+
+2. **Run the CLI**:
+   ```bash
+   make run X=10 Y=2
+   # or directly: uv run my-divide 10 2
+   ```
+
+3. **Start the API**:
+   ```bash
+   make run-api
+   # Visit http://127.0.0.1:8000/docs for the interactive Swagger UI
+   ```
+
+4. **Run CI Checks**:
+   ```bash
+   make ci-check
+   ```
+
+## 🛠️ Development
+- Add a dependency: `make add PKG=requests`
+- Add a dev dependency: `make add-dev PKG=httpx2`
+- Clean up: `make clean` (or `make deep-clean` for a total reset)
+
+========== ./src/tpp_mizan/app.py ==========
+# src/tpp_mizan/app.py
 import logging
 
 from fastapi import FastAPI, HTTPException
 
-from my_project.core.logging import configure_loggers
-from my_project.core.math_ops import div
+from tpp_mizan.core.logging import configure_loggers
+from tpp_mizan.core.math_ops import div
 
 # Initialize logging when the API module is loaded
 logger = logging.getLogger(__name__)
@@ -163,14 +220,14 @@ def divide(x: float, y: float):
         # Return a proper HTTP 400 error instead of a 500 server crash
         raise HTTPException(status_code=400, detail=str(e))
 
-========== ./src/my_project/cli.py ==========
-# src/my_project/cli.py
+========== ./src/tpp_mizan/cli.py ==========
+# src/tpp_mizan/cli.py
 import logging
 
 import typer
 
-from my_project.core.logging import configure_loggers
-from my_project.core.math_ops import div
+from tpp_mizan.core.logging import configure_loggers
+from tpp_mizan.core.math_ops import div
 
 # Initialize logging when the CLI starts
 configure_loggers()
@@ -199,7 +256,7 @@ def divide(
 if __name__ == "__main__":
     app()
 
-========== ./src/my_project/config/my_log.yaml ==========
+========== ./src/tpp_mizan/config/my_log.yaml ==========
 version: 1
 disable_existing_loggers: false
 
@@ -230,7 +287,7 @@ handlers:
   timed_file:
     formatter: file_formatter
     class: logging.handlers.TimedRotatingFileHandler
-    # filename: logs/my_project_timed.log
+    # filename: logs/tpp_mizan_timed.log
     when: midnight
     interval: 1  # 1 day
     backupCount: 30 # 30 days
@@ -239,12 +296,12 @@ handlers:
 loggers:
   root:
     level: WARNING  # Keeps external libraries quiet
-  my_project:
+  tpp_mizan:
     level: DEBUG    # Will be overridden by LOG_LEVEL env var in main.py
     handlers: [c_handler, json_file, timed_file]
     propagate: false # Good practice: stop it from bubbling to root
-========== ./src/my_project/core/logging.py ==========
-# src/my_project/core/logging.py
+========== ./src/tpp_mizan/core/logging.py ==========
+# src/tpp_mizan/core/logging.py
 import logging
 import logging.config
 import os
@@ -264,22 +321,22 @@ def configure_loggers():
     project_root = package_dir.parent.parent
     log_dir = project_root / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    config["handlers"]["json_file"]["filename"] = str(log_dir / "my_project.json.log")
+    config["handlers"]["json_file"]["filename"] = str(log_dir / "tpp_mizan.json.log")
     config["handlers"]["timed_file"]["filename"] = str(
-        log_dir / "my_project_timed.log"
+        log_dir / "tpp_mizan_timed.log"
     )  # <-- Added this
 
     # Override log level from env
     env_log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
-    config["loggers"]["my_project"]["level"] = env_log_level
+    config["loggers"]["tpp_mizan"]["level"] = env_log_level
 
     # Also override console handler level
     config["handlers"]["c_handler"]["level"] = env_log_level
 
     logging.config.dictConfig(config)
 
-========== ./src/my_project/core/math_ops.py ==========
-# src/my_project/core/math_ops.py
+========== ./src/tpp_mizan/core/math_ops.py ==========
+# src/tpp_mizan/core/math_ops.py
 import logging
 
 logger = logging.getLogger(__name__)
@@ -292,24 +349,24 @@ def div(x: float, y: float) -> float:
         raise ZeroDivisionError("Cannot divide by zero")
     return x / y
 
-========== ./src/my_project/__init__.py ==========
-# src/my_project/__init__.py
+========== ./src/tpp_mizan/__init__.py ==========
+# src/tpp_mizan/__init__.py
 """My Project: A FastAPI and CLI application."""
 
 from importlib.metadata import PackageNotFoundError, version
 
 try:
     # Reads the version directly from pyproject.toml
-    __version__ = version("my-project")
+    __version__ = version("tpp-mizan")
 except PackageNotFoundError:
     # Fallback if the package is run directly without being installed
     __version__ = "0.1.0"
 
-========== ./tests/my_project/core/test_math_ops.py ==========
-# tests/my_project/core/test_math_ops.py
+========== ./tests/tpp_mizan/core/test_math_ops.py ==========
+# tests/tpp_mizan/core/test_math_ops.py
 import pytest
 
-from my_project.core.math_ops import div
+from tpp_mizan.core.math_ops import div
 
 
 def test_div_success():
@@ -321,11 +378,11 @@ def test_div_by_zero():
     with pytest.raises(ZeroDivisionError, match="Cannot divide by zero"):
         div(10.0, 0.0)
 
-========== ./tests/my_project/test_app.py ==========
+========== ./tests/tpp_mizan/test_app.py ==========
 # tests/test_app.py
 from fastapi.testclient import TestClient
 
-from my_project.app import app
+from tpp_mizan.app import app
 
 client = TestClient(app)
 
@@ -348,11 +405,11 @@ def test_api_divide_by_zero():
     assert response.status_code == 400
     assert response.json()["detail"] == "Cannot divide by zero"
 
-========== ./tests/my_project/test_cli.py ==========
-# tests/my_project/test_cli.py
+========== ./tests/tpp_mizan/test_cli.py ==========
+# tests/tpp_mizan/test_cli.py
 from typer.testing import CliRunner
 
-from my_project.cli import app
+from tpp_mizan.cli import app
 
 runner = CliRunner()  # No special parameters needed
 

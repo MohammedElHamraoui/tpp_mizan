@@ -1,6 +1,6 @@
-# My Project
+# TPP Mizan
 
-A modern, production-ready Python template featuring FastAPI, Typer CLI, and structured JSON logging, managed by `uv`.
+A production-ready Python template from Tech Print Pack featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by `uv`.
 
 ## ✨ Features
 - ⚡ **Ultra-fast dependency management** with `uv`
@@ -37,3 +37,4 @@ A modern, production-ready Python template featuring FastAPI, Typer CLI, and str
 - Add a dependency: `make add PKG=requests`
 - Add a dev dependency: `make add-dev PKG=httpx2`
 - Clean up: `make clean` (or `make deep-clean` for a total reset)
+- Generate LLM context: `make context`

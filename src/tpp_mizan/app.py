@@ -1,10 +1,10 @@
-# src/my_project/app.py
+# src/tpp_mizan/app.py
 import logging
 
 from fastapi import FastAPI, HTTPException
 
-from my_project.core.logging import configure_loggers
-from my_project.core.math_ops import div
+from tpp_mizan.core.logging import configure_loggers
+from tpp_mizan.core.math_ops import div
 
 # Initialize logging when the API module is loaded
 logger = logging.getLogger(__name__)

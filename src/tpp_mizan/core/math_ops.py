@@ -1,4 +1,4 @@
-# src/my_project/core/math_ops.py
+# src/tpp_mizan/core/math_ops.py
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
-# tests/my_project/core/test_math_ops.py
+# tests/tpp_mizan/core/test_math_ops.py
 import pytest
 
-from my_project.core.math_ops import div
+from tpp_mizan.core.math_ops import div
 
 
 def test_div_success():
