@@ -90,7 +90,9 @@ build: ## Build wheel + sdist
 # --- LLM ---
 context: ## Export project source to tpp_mizan.txt for LLM feedback
 	@echo "Generating LLM context file..."
-	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "Makefile" \) \
+	@find . -type f \
+		\( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "*.yml" \
+		   -o -name "Makefile" -o -name ".gitignore" \) \
 		-not -path "./.venv/*" -not -path "./.git/*" -not -path "./logs/*" \
 		-not -path "./.pytest_cache/*" -not -path "./.mypy_cache/*" -not -path "./.ruff_cache/*" \
 		-not -path "./dist/*" -not -path "./build/*" -not -path "./htmlcov/*" \
@@ -101,7 +103,7 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback
 			echo ""; \
 		done > tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
-
+	
 rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
 	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
 		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi
@@ -112,7 +114,8 @@ rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app
 	for old, new in [("src/tpp_mizan", f"src/{pkg}"), ("tests/tpp_mizan", f"tests/{pkg}")]:
 	    if pathlib.Path(old).exists():
 	        pathlib.Path(old).rename(new)
-	for ext in ("*.py", "*.toml", "*.yaml", "*.md", "Makefile", "*.yml"):
+	# Added '.gitignore' to ensure the context file exclusion is also renamed
+	for ext in ("*.py", "*.toml", "*.yaml", "*.md", "Makefile", "*.yml", ".gitignore"):
 	    for p in pathlib.Path(".").rglob(ext):
 	        if any(x in p.parts for x in (".venv", ".git", "logs", ".pytest_cache", ".mypy_cache", ".ruff_cache")):
 	            continue

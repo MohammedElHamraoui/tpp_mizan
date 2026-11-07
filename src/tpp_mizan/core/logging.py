@@ -4,10 +4,18 @@ import logging.config
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv  # <-- Added import
+from dotenv import load_dotenv
 from yaml import safe_load
 
 _CONFIGURED = False  # <-- Guard against double initialization
+
+
+def _default_project_root() -> Path:
+    """Find the project root by walking up to pyproject.toml; fall back to cwd."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+    return Path.cwd()
 
 
 def configure_loggers() -> None:
@@ -22,10 +30,9 @@ def configure_loggers() -> None:
         config = safe_load(f)
 
     # Dynamically set log path to project root, OR override via env var
-    project_root = package_dir.parent.parent
+    project_root = _default_project_root()
 
     # Load environment variables from .env file in the project root
-    # This justifies keeping the python-dotenv dependency!
     load_dotenv(project_root / ".env", override=False)
 
     log_dir = Path(os.getenv("TPP_MIZAN_LOG_DIR", str(project_root / "logs")))

@@ -1,20 +1,24 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main" ] 
-  pull_request:
-    branches: [ "main" ]
+  push: { branches: ["main"] }
+  pull_request: { branches: ["main"] }
+
+permissions:
+  contents: read  # Principle of least privilege
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevents hung jobs from burning CI minutes
     steps:
       - uses: actions/checkout@v4
       
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
-        
+        with:
+          python-version: "3.13"  # Pin Python explicitly; don't rely on ubuntu-latest defaults
+      
       - name: Install dependencies
         run: uv sync --dev
         
