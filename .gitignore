@@ -1,4 +1,3 @@
-
 # Byte-compiled / optimized files
 __pycache__/
 *.py[cod]
@@ -14,8 +13,10 @@ dist/
 venv/
 env/
 
-# Testing / Coverage
+# Testing / Coverage / Linting caches
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
@@ -27,5 +28,5 @@ htmlcov/
 
 # Project specific
 logs/
-my_project.txt
+tpp_mizan.txt
 .env

@@ -7,7 +7,7 @@ A production-ready Python template from Tech Print Pack featuring FastAPI REST A
 - 🚀 **FastAPI** for high-performance, auto-documented REST APIs
 - 💻 **Typer** for type-safe, intuitive CLI tools
 - 📝 **Structured JSON Logging** with dynamic path resolution and log rotation
-- ✅ **Bulletproof CI/CD** via `make ci-check` (Ruff, Mypy, Pytest)
+- ✅ **Bulletproof CI/CD** via GitHub Actions running `make ci-check` (Ruff, Mypy, Pytest)
 
 ## 🚀 Quick Start
 
@@ -16,16 +16,19 @@ A production-ready Python template from Tech Print Pack featuring FastAPI REST A
    make install
    ```
 
-2. **Run the CLI**:
+2. **Run the CLI** (supports `add`, `subtract`, `multiply`, `divide`):
    ```bash
-   make run X=10 Y=2
-   # or directly: uv run my-divide 10 2
+   make run-add X=10 Y=2        # → 12.0
+   make run-subtract X=10 Y=2   # → 8.0
+   make run-multiply X=10 Y=2   # → 20.0
+   make run X=10 Y=2            # → 5.0 (divide is the default)
    ```
 
 3. **Start the API**:
    ```bash
    make run-api
    # Visit http://127.0.0.1:8000/docs for the interactive Swagger UI
+   # Endpoints: /add/{x}/{y}, /subtract/{x}/{y}, /multiply/{x}/{y}, /divide/{x}/{y}
    ```
 
 4. **Run CI Checks**:

@@ -12,13 +12,14 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-json-logger>=4.2.0",
     "pyyaml>=6.0.3",
-    "typer>=0.15.0",  # Changed from 0.28.0
+    "typer>=0.28.0",
     "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=7.0.0",
     "ruff>=0.9.0",
     "mypy>=1.13.0",
     "types-pyyaml>=6.0.12.20261103",
@@ -26,8 +27,37 @@ dev = [
 ]
 
 [project.scripts]
-my-divide = "tpp_mizan.cli:app"
+tpp-mizan = "tpp_mizan.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+exclude = ["^tests/"]
+
+# Only ignore missing imports for specific third-party libraries that lack stubs
+[[tool.mypy.overrides]]
+module = [
+    "yaml",                  # PyYAML (though types-pyyaml is installed, this is a safe fallback)
+    "pythonjsonlogger.*",    # python-json-logger
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["tpp_mizan"]
+omit = ["*/tests/*"]

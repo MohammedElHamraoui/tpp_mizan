@@ -1,5 +1,7 @@
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install test lint format run run-api build clean deep-clean context add add-dev rename
+.PHONY: help sync install add add-dev remove lock format format-check lint \
+        test test-cov run run-add run-subtract run-multiply run-api build \
+        clean deep-clean context ci-check rename
 
 # Default target
 help: ## Show this help message
@@ -28,13 +30,19 @@ lock: ## Update the lockfile without installing to the venv
 	uv lock
 
 # --- Code Quality ---
-format: ## Format code using Ruff
+format: ## Format code locally (mutates files)
 	uv run ruff format .
 	uv run ruff check --fix .
 
-lint: ## Lint code using Ruff and Mypy
+format-check: ## Check formatting without mutating (for CI)
+	uv run ruff format --check .
 	uv run ruff check .
+
+lint: ## Lint code using Mypy
 	uv run mypy .
+
+# --- CI/CD ---
+ci-check: format-check lint test ## Run all CI checks locally (non-mutating)
 
 # --- Testing ---
 test: ## Run tests with pytest
@@ -48,8 +56,17 @@ test-cov: ## Run tests with coverage report
 X ?= 10
 Y ?= 2
 
-run: ## Run the main CLI application (Usage: make run X=5 Y=2)
-	uv run my-divide $(X) $(Y)
+run: ## Run the default CLI command (divide). Usage: make run X=5 Y=2
+	uv run tpp-mizan divide $(X) $(Y)
+
+run-add: ## Run addition. Usage: make run-add X=5 Y=2
+	uv run tpp-mizan add $(X) $(Y)
+
+run-subtract: ## Run subtraction. Usage: make run-subtract X=5 Y=2
+	uv run tpp-mizan subtract $(X) $(Y)
+
+run-multiply: ## Run multiplication. Usage: make run-multiply X=5 Y=2
+	uv run tpp-mizan multiply $(X) $(Y)
 
 run-api: ## Run the FastAPI application with hot-reloading
 	uv run uvicorn tpp_mizan.app:app --reload --host 127.0.0.1 --port 8000
@@ -66,14 +83,18 @@ deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 	rm -f uv.lock
 	@echo "Deep clean complete. (Next 'make install' will re-resolve dependencies)"
 
-# --- CI/CD ---
-ci-check: format lint test ## Run all CI checks locally
-
+# --- Packaging ---
+build: ## Build wheel + sdist
+	uv build
+	
 # --- LLM ---
 context: ## Export project source to tpp_mizan.txt for LLM feedback
 	@echo "Generating LLM context file..."
 	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "Makefile" \) \
-		-not -path "./.venv/*" -not -path "./logs/*" -not -path "./.git/*" \
+		-not -path "./.venv/*" -not -path "./.git/*" -not -path "./logs/*" \
+		-not -path "./.pytest_cache/*" -not -path "./.mypy_cache/*" -not -path "./.ruff_cache/*" \
+		-not -path "./dist/*" -not -path "./build/*" -not -path "./htmlcov/*" \
+		-not -name "tpp_mizan.txt" \
 		| sort | while read -r f; do \
 			echo "========== $$f =========="; \
 			cat "$$f"; \
@@ -81,21 +102,20 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback
 		done > tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
 
-rename: ## Rename the project (Usage: make rename NEW_NAME=tpp_mizan)
-	@if [ -z "$(NEW_NAME)" ]; then \
-		echo "Error: NEW_NAME is required. Usage: make rename NEW_NAME=tpp_mizan"; \
-		exit 1; \
-	fi
-	@echo "Renaming project to '$(NEW_NAME)' (project: tpp-mizan)..."
-	# 1. Update pyproject.toml project name (uses hyphens per PEP 621)
-	@sed -i 's/name = "tpp-mizan"/name = "tpp-mizan"/' pyproject.toml
-	# 2. Rename source and test directories (uses underscores for Python imports)
-	@if [ -d "src/tpp_mizan" ]; then mv src/tpp_mizan src/$(NEW_NAME); fi
-	@if [ -d "tests/tpp_mizan" ]; then mv tests/tpp_mizan tests/$(NEW_NAME); fi
-	# 3. Replace all internal module references (tpp_mizan -> tpp_mizan)
-	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.yaml" -o -name "Makefile" -o -name "*.md" \) \
-		-not -path "./.venv/*" -not -path "./.git/*" -exec sed -i "s/tpp_mizan/$(NEW_NAME)/g" {} +
-	# 4. Replace all internal project name references (tpp-mizan -> tpp-mizan)
-	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.yaml" -o -name "Makefile" -o -name "*.md" \) \
-		-not -path "./.venv/*" -not -path "./.git/*" -exec sed -i "s/tpp-mizan/tpp-mizan/g" {} +
-	@echo "✅ Rename complete! Run 'make deep-clean && make install' to rebuild the environment."
+rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
+	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
+		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi
+	@uv run python - "$(NEW_NAME)" "$(NEW_PROJECT)" <<'PY'
+	import pathlib, re, sys
+	pkg, prj = sys.argv[1], sys.argv[2]
+	assert re.fullmatch(r"[a-z_][a-z0-9_]*", pkg), "NEW_NAME must be a valid Python identifier"
+	for old, new in [("src/tpp_mizan", f"src/{pkg}"), ("tests/tpp_mizan", f"tests/{pkg}")]:
+	    if pathlib.Path(old).exists():
+	        pathlib.Path(old).rename(new)
+	for ext in ("*.py", "*.toml", "*.yaml", "*.md", "Makefile", "*.yml"):
+	    for p in pathlib.Path(".").rglob(ext):
+	        if any(x in p.parts for x in (".venv", ".git", "logs", ".pytest_cache", ".mypy_cache", ".ruff_cache")):
+	            continue
+	        p.write_text(p.read_text().replace("tpp_mizan", pkg).replace("tpp-mizan", prj))
+	PY
+	@echo "✅ Rename complete! Run 'make deep-clean && make install' to rebuild."

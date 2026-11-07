@@ -1,5 +1,5 @@
 # src/tpp_mizan/__init__.py
-"""My Project: A FastAPI and CLI application."""
+"""TPP Mizan: FastAPI + CLI template."""
 
 from importlib.metadata import PackageNotFoundError, version
 

@@ -1,6 +1,8 @@
 ========== ./Makefile ==========
 # Define phony targets (targets that don't represent files)
-.PHONY: help sync install test lint format run run-api build clean deep-clean context add add-dev rename
+.PHONY: help sync install add add-dev remove lock format format-check lint \
+        test test-cov run run-add run-subtract run-multiply run-api build \
+        clean deep-clean context ci-check rename
 
 # Default target
 help: ## Show this help message
@@ -29,13 +31,19 @@ lock: ## Update the lockfile without installing to the venv
 	uv lock
 
 # --- Code Quality ---
-format: ## Format code using Ruff
+format: ## Format code locally (mutates files)
 	uv run ruff format .
 	uv run ruff check --fix .
 
-lint: ## Lint code using Ruff and Mypy
+format-check: ## Check formatting without mutating (for CI)
+	uv run ruff format --check .
 	uv run ruff check .
+
+lint: ## Lint code using Mypy
 	uv run mypy .
+
+# --- CI/CD ---
+ci-check: format-check lint test ## Run all CI checks locally (non-mutating)
 
 # --- Testing ---
 test: ## Run tests with pytest
@@ -49,8 +57,17 @@ test-cov: ## Run tests with coverage report
 X ?= 10
 Y ?= 2
 
-run: ## Run the main CLI application (Usage: make run X=5 Y=2)
-	uv run my-divide $(X) $(Y)
+run: ## Run the default CLI command (divide). Usage: make run X=5 Y=2
+	uv run tpp-mizan divide $(X) $(Y)
+
+run-add: ## Run addition. Usage: make run-add X=5 Y=2
+	uv run tpp-mizan add $(X) $(Y)
+
+run-subtract: ## Run subtraction. Usage: make run-subtract X=5 Y=2
+	uv run tpp-mizan subtract $(X) $(Y)
+
+run-multiply: ## Run multiplication. Usage: make run-multiply X=5 Y=2
+	uv run tpp-mizan multiply $(X) $(Y)
 
 run-api: ## Run the FastAPI application with hot-reloading
 	uv run uvicorn tpp_mizan.app:app --reload --host 127.0.0.1 --port 8000
@@ -67,14 +84,18 @@ deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 	rm -f uv.lock
 	@echo "Deep clean complete. (Next 'make install' will re-resolve dependencies)"
 
-# --- CI/CD ---
-ci-check: format lint test ## Run all CI checks locally
-
+# --- Packaging ---
+build: ## Build wheel + sdist
+	uv build
+	
 # --- LLM ---
 context: ## Export project source to tpp_mizan.txt for LLM feedback
 	@echo "Generating LLM context file..."
 	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "Makefile" \) \
-		-not -path "./.venv/*" -not -path "./logs/*" -not -path "./.git/*" \
+		-not -path "./.venv/*" -not -path "./.git/*" -not -path "./logs/*" \
+		-not -path "./.pytest_cache/*" -not -path "./.mypy_cache/*" -not -path "./.ruff_cache/*" \
+		-not -path "./dist/*" -not -path "./build/*" -not -path "./htmlcov/*" \
+		-not -name "tpp_mizan.txt" \
 		| sort | while read -r f; do \
 			echo "========== $$f =========="; \
 			cat "$$f"; \
@@ -82,29 +103,28 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback
 		done > tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
 
-rename: ## Rename the project (Usage: make rename NEW_NAME=tpp_mizan)
-	@if [ -z "$(NEW_NAME)" ]; then \
-		echo "Error: NEW_NAME is required. Usage: make rename NEW_NAME=tpp_mizan"; \
-		exit 1; \
-	fi
-	@echo "Renaming project to '$(NEW_NAME)' (project: tpp-mizan)..."
-	# 1. Update pyproject.toml project name (uses hyphens per PEP 621)
-	@sed -i 's/name = "tpp-mizan"/name = "tpp-mizan"/' pyproject.toml
-	# 2. Rename source and test directories (uses underscores for Python imports)
-	@if [ -d "src/tpp_mizan" ]; then mv src/tpp_mizan src/$(NEW_NAME); fi
-	@if [ -d "tests/tpp_mizan" ]; then mv tests/tpp_mizan tests/$(NEW_NAME); fi
-	# 3. Replace all internal module references (tpp_mizan -> tpp_mizan)
-	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.yaml" -o -name "Makefile" -o -name "*.md" \) \
-		-not -path "./.venv/*" -not -path "./.git/*" -exec sed -i "s/tpp_mizan/$(NEW_NAME)/g" {} +
-	# 4. Replace all internal project name references (tpp-mizan -> tpp-mizan)
-	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.yaml" -o -name "Makefile" -o -name "*.md" \) \
-		-not -path "./.venv/*" -not -path "./.git/*" -exec sed -i "s/tpp-mizan/tpp-mizan/g" {} +
-	@echo "✅ Rename complete! Run 'make deep-clean && make install' to rebuild the environment."
+rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
+	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
+		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi
+	@uv run python - "$(NEW_NAME)" "$(NEW_PROJECT)" <<'PY'
+	import pathlib, re, sys
+	pkg, prj = sys.argv[1], sys.argv[2]
+	assert re.fullmatch(r"[a-z_][a-z0-9_]*", pkg), "NEW_NAME must be a valid Python identifier"
+	for old, new in [("src/tpp_mizan", f"src/{pkg}"), ("tests/tpp_mizan", f"tests/{pkg}")]:
+	    if pathlib.Path(old).exists():
+	        pathlib.Path(old).rename(new)
+	for ext in ("*.py", "*.toml", "*.yaml", "*.md", "Makefile", "*.yml"):
+	    for p in pathlib.Path(".").rglob(ext):
+	        if any(x in p.parts for x in (".venv", ".git", "logs", ".pytest_cache", ".mypy_cache", ".ruff_cache")):
+	            continue
+	        p.write_text(p.read_text().replace("tpp_mizan", pkg).replace("tpp-mizan", prj))
+	PY
+	@echo "✅ Rename complete! Run 'make deep-clean && make install' to rebuild."
 ========== ./pyproject.toml ==========
 [project]
 name = "tpp-mizan"
 version = "0.1.0"
-description = "Add your description here"
+description = "A production-ready Python template featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by uv"
 readme = "README.md"
 authors = [
     { name = "Mohammed El Hamraoui", email = "92893757+MohammedElHamraoui@users.noreply.github.com" },
@@ -115,13 +135,14 @@ dependencies = [
     "python-dotenv>=1.2.4",
     "python-json-logger>=4.2.0",
     "pyyaml>=6.0.3",
-    "typer>=0.15.0",  # Changed from 0.28.0
+    "typer>=0.28.0",
     "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=7.0.0",
     "ruff>=0.9.0",
     "mypy>=1.13.0",
     "types-pyyaml>=6.0.12.20261103",
@@ -129,33 +150,52 @@ dev = [
 ]
 
 [project.scripts]
-my-divide = "tpp_mizan.cli:app"
+tpp-mizan = "tpp_mizan.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14.0"]
 build-backend = "uv_build"
 
-========== ./.pytest_cache/README.md ==========
-# pytest cache directory #
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
 
-This directory contains data from the pytest's cache plugin,
-which provides the `--lf` and `--ff` options, as well as the `cache` fixture.
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 
-**Do not** commit this to version control.
+[tool.mypy]
+python_version = "3.13"
+strict = true
+exclude = ["^tests/"]
 
-See [the docs](https://docs.pytest.org/en/stable/how-to/cache.html) for more information.
+# Only ignore missing imports for specific third-party libraries that lack stubs
+[[tool.mypy.overrides]]
+module = [
+    "yaml",                  # PyYAML (though types-pyyaml is installed, this is a safe fallback)
+    "pythonjsonlogger.*",    # python-json-logger
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["tpp_mizan"]
+omit = ["*/tests/*"]
 
 ========== ./README.md ==========
-# My Project
+# TPP Mizan
 
-A modern, production-ready Python template featuring FastAPI, Typer CLI, and structured JSON logging, managed by `uv`.
+A production-ready Python template from Tech Print Pack featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by `uv`.
 
 ## ✨ Features
 - ⚡ **Ultra-fast dependency management** with `uv`
 - 🚀 **FastAPI** for high-performance, auto-documented REST APIs
 - 💻 **Typer** for type-safe, intuitive CLI tools
 - 📝 **Structured JSON Logging** with dynamic path resolution and log rotation
-- ✅ **Bulletproof CI/CD** via `make ci-check` (Ruff, Mypy, Pytest)
+- ✅ **Bulletproof CI/CD** via GitHub Actions running `make ci-check` (Ruff, Mypy, Pytest)
 
 ## 🚀 Quick Start
 
@@ -164,16 +204,19 @@ A modern, production-ready Python template featuring FastAPI, Typer CLI, and str
    make install
    ```
 
-2. **Run the CLI**:
+2. **Run the CLI** (supports `add`, `subtract`, `multiply`, `divide`):
    ```bash
-   make run X=10 Y=2
-   # or directly: uv run my-divide 10 2
+   make run-add X=10 Y=2        # → 12.0
+   make run-subtract X=10 Y=2   # → 8.0
+   make run-multiply X=10 Y=2   # → 20.0
+   make run X=10 Y=2            # → 5.0 (divide is the default)
    ```
 
 3. **Start the API**:
    ```bash
    make run-api
    # Visit http://127.0.0.1:8000/docs for the interactive Swagger UI
+   # Endpoints: /add/{x}/{y}, /subtract/{x}/{y}, /multiply/{x}/{y}, /divide/{x}/{y}
    ```
 
 4. **Run CI Checks**:
@@ -185,40 +228,62 @@ A modern, production-ready Python template featuring FastAPI, Typer CLI, and str
 - Add a dependency: `make add PKG=requests`
 - Add a dev dependency: `make add-dev PKG=httpx2`
 - Clean up: `make clean` (or `make deep-clean` for a total reset)
+- Generate LLM context: `make context`
 
 ========== ./src/tpp_mizan/app.py ==========
 # src/tpp_mizan/app.py
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
 from tpp_mizan.core.logging import configure_loggers
-from tpp_mizan.core.math_ops import div
+from tpp_mizan.core.math_ops import add, div, multiply, subtract
+from tpp_mizan.schemas import MathResult
 
-# Initialize logging when the API module is loaded
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_loggers()
+    yield
+
+
 logger = logging.getLogger(__name__)
-configure_loggers()
-
-
-app = FastAPI(title="My Project API")
+app = FastAPI(title="TPP Mizan API", lifespan=lifespan)
 
 
 @app.get("/")
-def read_root():
+def read_root() -> dict[str, str]:
     logger.info("Root endpoint accessed")
-    return {"message": "Welcome to My Project API"}
+    return {"message": "Welcome to TPP Mizan API"}
 
 
-@app.get("/divide/{x}/{y}")
-def divide(x: float, y: float):
-    logger.info("API request: divide %s by %s", x, y)
+@app.get("/add/{x}/{y}", response_model=MathResult)
+def add_endpoint(x: float, y: float) -> MathResult:
+    logger.info("API request: add %s + %s", x, y)
+    return MathResult(operation="add", x=x, y=y, result=add(x, y))
+
+
+@app.get("/subtract/{x}/{y}", response_model=MathResult)
+def subtract_endpoint(x: float, y: float) -> MathResult:
+    logger.info("API request: subtract %s - %s", x, y)
+    return MathResult(operation="subtract", x=x, y=y, result=subtract(x, y))
+
+
+@app.get("/multiply/{x}/{y}", response_model=MathResult)
+def multiply_endpoint(x: float, y: float) -> MathResult:
+    logger.info("API request: multiply %s * %s", x, y)
+    return MathResult(operation="multiply", x=x, y=y, result=multiply(x, y))
+
+
+@app.get("/divide/{x}/{y}", response_model=MathResult)
+def divide_endpoint(x: float, y: float) -> MathResult:
+    logger.info("API request: divide %s / %s", x, y)
     try:
-        result = div(x, y)
-        return {"x": x, "y": y, "result": result}
+        return MathResult(operation="divide", x=x, y=y, result=div(x, y))
     except ZeroDivisionError as e:
-        logger.error("API error: %s", e)
-        # Return a proper HTTP 400 error instead of a 500 server crash
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 ========== ./src/tpp_mizan/cli.py ==========
 # src/tpp_mizan/cli.py
@@ -226,31 +291,94 @@ import logging
 
 import typer
 
+from tpp_mizan import __version__
 from tpp_mizan.core.logging import configure_loggers
-from tpp_mizan.core.math_ops import div
+from tpp_mizan.core.math_ops import add, div, multiply, subtract
 
-# Initialize logging when the CLI starts
-configure_loggers()
+# Logger is instantiated here, but handlers are attached later by configure_loggers()
 logger = logging.getLogger(__name__)
 
-app = typer.Typer(help="A simple division CLI tool.")
+app = typer.Typer(
+    help="TPP Mizan: A production-ready math CLI tool for Tech Print Pack.",
+    no_args_is_help=True,
+    add_completion=False,
+)
 
 
-@app.command()
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"tpp-mizan {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,  # <-- Changed from None to False to satisfy mypy strict mode
+        "--version",
+        # "-v" removed: reserved for future --verbose logging flag
+        callback=version_callback,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
+) -> None:
+    """TPP Mizan CLI entry point."""
+    # Initialize logging ONLY when the CLI is actually invoked.
+    configure_loggers()
+
+
+@app.command(name="add")
+def add_cmd(
+    x: float = typer.Argument(..., help="First number"),
+    y: float = typer.Argument(..., help="Second number"),
+) -> None:
+    """Add X and Y."""
+    logger.info("CLI request: add %s + %s", x, y)
+    result = add(x, y)
+    logger.info("CLI success: %s + %s = %s", x, y, result)
+    typer.echo(f"Result: {x} + {y} = {result}")
+
+
+@app.command(name="subtract")
+def subtract_cmd(
+    x: float = typer.Argument(..., help="Number to subtract from"),
+    y: float = typer.Argument(..., help="Number to subtract"),
+) -> None:
+    """Subtract Y from X."""
+    logger.info("CLI request: subtract %s - %s", x, y)
+    result = subtract(x, y)
+    logger.info("CLI success: %s - %s = %s", x, y, result)
+    typer.echo(f"Result: {x} - {y} = {result}")
+
+
+@app.command(name="multiply")
+def multiply_cmd(
+    x: float = typer.Argument(..., help="First number"),
+    y: float = typer.Argument(..., help="Second number"),
+) -> None:
+    """Multiply X by Y."""
+    logger.info("CLI request: multiply %s * %s", x, y)
+    result = multiply(x, y)
+    logger.info("CLI success: %s * %s = %s", x, y, result)
+    typer.echo(f"Result: {x} * {y} = {result}")
+
+
+@app.command(name="divide")
 def divide(
     x: float = typer.Argument(..., help="The numerator"),
     y: float = typer.Argument(..., help="The denominator"),
-):
+) -> None:
     """Divide X by Y."""
-    logger.info("CLI request: divide %s by %s", x, y)  # <-- Add this
+    logger.info("CLI request: divide %s / %s", x, y)
     try:
         result = div(x, y)
-        logger.info("CLI success: %s / %s = %s", x, y, result)  # <-- Add this
+        logger.info("CLI success: %s / %s = %s", x, y, result)
         typer.echo(f"Result: {x} / {y} = {result}")
     except ZeroDivisionError as e:
-        logger.error("CLI error: %s", e)  # <-- Add this
+        # Log as WARNING: it's a client input error, not a system crash
+        logger.warning("CLI division error: %s", e)
         typer.echo("Error: Division by zero.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 if __name__ == "__main__":
@@ -307,33 +435,43 @@ import logging.config
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv  # <-- Added import
 from yaml import safe_load
 
+_CONFIGURED = False  # <-- Guard against double initialization
 
-def configure_loggers():
+
+def configure_loggers() -> None:
+    global _CONFIGURED
+    if _CONFIGURED:
+        return
+
     package_dir = Path(__file__).resolve().parent.parent
     config_path = package_dir / "config" / "my_log.yaml"
 
     with open(config_path) as f:
         config = safe_load(f)
 
-    # Dynamically set log path to project root
+    # Dynamically set log path to project root, OR override via env var
     project_root = package_dir.parent.parent
-    log_dir = project_root / "logs"
+
+    # Load environment variables from .env file in the project root
+    # This justifies keeping the python-dotenv dependency!
+    load_dotenv(project_root / ".env", override=False)
+
+    log_dir = Path(os.getenv("TPP_MIZAN_LOG_DIR", str(project_root / "logs")))
     log_dir.mkdir(parents=True, exist_ok=True)
+
     config["handlers"]["json_file"]["filename"] = str(log_dir / "tpp_mizan.json.log")
-    config["handlers"]["timed_file"]["filename"] = str(
-        log_dir / "tpp_mizan_timed.log"
-    )  # <-- Added this
+    config["handlers"]["timed_file"]["filename"] = str(log_dir / "tpp_mizan_timed.log")
 
     # Override log level from env
-    env_log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    env_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     config["loggers"]["tpp_mizan"]["level"] = env_log_level
-
-    # Also override console handler level
     config["handlers"]["c_handler"]["level"] = env_log_level
 
     logging.config.dictConfig(config)
+    _CONFIGURED = True
 
 ========== ./src/tpp_mizan/core/math_ops.py ==========
 # src/tpp_mizan/core/math_ops.py
@@ -342,16 +480,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def add(x: float, y: float) -> float:
+    """Add x and y."""
+    logger.info("Performing addition: %s + %s", x, y)
+    return x + y
+
+
+def subtract(x: float, y: float) -> float:
+    """Subtract y from x."""
+    logger.info("Performing subtraction: %s - %s", x, y)
+    return x - y
+
+
+def multiply(x: float, y: float) -> float:
+    """Multiply x by y."""
+    logger.info("Performing multiplication: %s * %s", x, y)
+    return x * y
+
+
 def div(x: float, y: float) -> float:
     """Divide x by y. Raises ZeroDivisionError if y is 0."""
     if y == 0:
-        logger.error("A math error occurred: Division by zero!")
+        # Pure function: no logging, just raise the domain exception
         raise ZeroDivisionError("Cannot divide by zero")
+    logger.info("Performing division: %s / %s", x, y)
     return x / y
 
 ========== ./src/tpp_mizan/__init__.py ==========
 # src/tpp_mizan/__init__.py
-"""My Project: A FastAPI and CLI application."""
+"""TPP Mizan: FastAPI + CLI template."""
 
 from importlib.metadata import PackageNotFoundError, version
 
@@ -362,11 +519,57 @@ except PackageNotFoundError:
     # Fallback if the package is run directly without being installed
     __version__ = "0.1.0"
 
+========== ./src/tpp_mizan/__main__.py ==========
+from tpp_mizan.cli import app
+
+if __name__ == "__main__":
+    app()
+
+========== ./src/tpp_mizan/schemas.py ==========
+# src/tpp_mizan/schemas.py
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class MathResult(BaseModel):
+    """Standard response model for all math operations."""
+
+    operation: Literal["add", "subtract", "multiply", "divide"]
+    x: float
+    y: float
+    result: float
+
+========== ./tests/conftest.py ==========
+import pytest
+
+from tpp_mizan.core import logging as applog
+
+
+@pytest.fixture(autouse=True)
+def _isolate_logs(tmp_path, monkeypatch):
+    monkeypatch.setenv("TPP_MIZAN_LOG_DIR", str(tmp_path / "logs"))
+    applog._CONFIGURED = False
+    yield
+    applog._CONFIGURED = False
+
 ========== ./tests/tpp_mizan/core/test_math_ops.py ==========
 # tests/tpp_mizan/core/test_math_ops.py
 import pytest
 
-from tpp_mizan.core.math_ops import div
+from tpp_mizan.core.math_ops import add, div, multiply, subtract
+
+
+def test_add():
+    assert add(10.0, 2.0) == 12.0
+
+
+def test_subtract():
+    assert subtract(10.0, 2.0) == 8.0
+
+
+def test_multiply():
+    assert multiply(10.0, 2.0) == 20.0
 
 
 def test_div_success():
@@ -374,34 +577,56 @@ def test_div_success():
 
 
 def test_div_by_zero():
-    # Verify that calling div with 0 raises a ZeroDivisionError
     with pytest.raises(ZeroDivisionError, match="Cannot divide by zero"):
         div(10.0, 0.0)
 
 ========== ./tests/tpp_mizan/test_app.py ==========
-# tests/test_app.py
+# tests/tpp_mizan/test_app.py
+import pytest
 from fastapi.testclient import TestClient
 
 from tpp_mizan.app import app
 
-client = TestClient(app)
+
+@pytest.fixture
+def client():
+    # The 'with' block is what actually triggers the FastAPI lifespan (startup/shutdown)
+    with TestClient(app) as c:
+        yield c
 
 
-def test_read_root():
+def test_read_root(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"message": "Welcome to My Project API"}
+    assert response.json() == {"message": "Welcome to TPP Mizan API"}
 
 
-def test_api_divide_success():
+def test_api_add(client):
+    response = client.get("/add/10.0/2.0")
+    assert response.status_code == 200
+    assert response.json() == {"operation": "add", "x": 10.0, "y": 2.0, "result": 12.0}
+
+
+def test_api_subtract(client):
+    response = client.get("/subtract/10.0/2.0")
+    assert response.status_code == 200
+    assert response.json() == {"operation": "subtract", "x": 10.0, "y": 2.0, "result": 8.0}
+
+
+def test_api_multiply(client):
+    response = client.get("/multiply/10.0/2.0")
+    assert response.status_code == 200
+    assert response.json() == {"operation": "multiply", "x": 10.0, "y": 2.0, "result": 20.0}
+
+
+def test_api_divide_success(client):
     response = client.get("/divide/10.0/2.0")
     assert response.status_code == 200
-    assert response.json() == {"x": 10.0, "y": 2.0, "result": 5.0}
+    assert response.json() == {"operation": "divide", "x": 10.0, "y": 2.0, "result": 5.0}
 
 
-def test_api_divide_by_zero():
+def test_api_divide_by_zero(client):
     response = client.get("/divide/10.0/0.0")
-    # Verify it returns HTTP 400, not 500
     assert response.status_code == 400
     assert response.json()["detail"] == "Cannot divide by zero"
 
@@ -411,17 +636,50 @@ from typer.testing import CliRunner
 
 from tpp_mizan.cli import app
 
-runner = CliRunner()  # No special parameters needed
+runner = CliRunner()
+
+
+def test_cli_add():
+    result = runner.invoke(app, ["add", "10", "2"])
+    assert result.exit_code == 0
+    assert "Result: 10.0 + 2.0 = 12.0" in result.output
+
+
+def test_cli_subtract():
+    result = runner.invoke(app, ["subtract", "10", "2"])
+    assert result.exit_code == 0
+    assert "Result: 10.0 - 2.0 = 8.0" in result.output
+
+
+def test_cli_multiply():
+    result = runner.invoke(app, ["multiply", "10", "2"])
+    assert result.exit_code == 0
+    assert "Result: 10.0 * 2.0 = 20.0" in result.output
 
 
 def test_cli_divide_success():
-    result = runner.invoke(app, ["10", "2"])
+    result = runner.invoke(app, ["divide", "10", "2"])
     assert result.exit_code == 0
-    assert "Result: 10.0 / 2.0 = 5.0" in result.output  # Changed to .output
+    assert "Result: 10.0 / 2.0 = 5.0" in result.output
 
 
 def test_cli_divide_by_zero():
-    result = runner.invoke(app, ["10", "0"])
+    result = runner.invoke(app, ["divide", "10", "0"])
     assert result.exit_code == 1
-    assert "Error: Division by zero." in result.output  # Changed to .output
+    assert "Error: Division by zero." in result.output
+
+
+def test_cli_version():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "tpp-mizan" in result.output
+
+
+def test_cli_help():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "add" in result.output
+    assert "subtract" in result.output
+    assert "multiply" in result.output
+    assert "divide" in result.output
 
