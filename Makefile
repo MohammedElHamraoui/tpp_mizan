@@ -17,6 +17,9 @@ sync: ## Create venv, resolve lockfile, and install project
 install: sync ## Ensure project is installed (runs sync)
 	@echo "Project synced and installed successfully."
 
+install-hooks: ## Install pre-commit git hooks (run once after cloning)
+	uv run pre-commit install
+
 add: ## Add a new dependency (Usage: make add PKG=requests)
 	uv add $(PKG)
 
@@ -75,14 +78,14 @@ run-api: ## Run the FastAPI application with hot-reloading
 
 # --- Maintenance ---
 clean: ## Clean up caches and build artifacts (keeps .venv intact)
-	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage dist build
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage dist build *.egg-info
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	uv cache clean
 
 clean-venv: ## Remove the virtual environment
 	rm -rf .venv
 	@echo "Virtual environment removed. Run 'make install' to recreate it."
-	
+
 deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 	rm -rf logs/
 	rm -f tpp_mizan.txt

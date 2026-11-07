@@ -3,10 +3,8 @@ name = "tpp-mizan"
 version = "0.1.0"
 description = "A production-ready Python template featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by uv"
 readme = "README.md"
-license = "MIT" # ← PEP 639: Plain SPDX string
-license-files = [
-    "LICENSE",
-] # ← PEP 639: Explicitly include the license file in the wheel
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 keywords = ["template", "fastapi", "typer", "uv", "json-logging", "math"]
 classifiers = [
@@ -59,6 +57,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["tpp_mizan"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
@@ -80,6 +81,5 @@ addopts = "-ra --strict-markers"
 source = ["tpp_mizan"]
 omit = ["*/tests/*"]
 
-# Add this new section at the bottom:
 [tool.coverage.report]
-fail_under = 80 # <-- CI will fail if coverage drops below 80%
+fail_under = 80

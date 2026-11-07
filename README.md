@@ -51,3 +51,10 @@ You can configure the application by setting these variables in your shell or a 
 - Add a dev dependency: `make add-dev PKG=httpx2`
 - Clean up: `make clean` (or `make deep-clean` for a total reset)
 - Generate LLM context: `make context`
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+Contributions, issues, and feature requests are welcome!
+Feel free to check the [issues page](https://github.com/MohammedElHamraoui/tpp_mizan/issues).

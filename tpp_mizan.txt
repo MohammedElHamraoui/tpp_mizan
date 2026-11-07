@@ -24,10 +24,9 @@
 ├── Makefile
 ├── pyproject.toml
 ├── README.md
-├── tpp_mizan.txt
 └── uv.lock
 
-8 directories, 19 files
+8 directories, 18 files
 
 ========== ./.github/workflows/ci.yml ==========
 name: CI
@@ -45,15 +44,15 @@ jobs:
     timeout-minutes: 10  # Prevents hung jobs from burning CI minutes
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"  # Pin Python explicitly; don't rely on ubuntu-latest defaults
-      
+
       - name: Install dependencies
-        run: uv sync --dev
-        
+        run: uv sync --frozen
+
       - name: Run CI checks
         run: make ci-check
 ========== ./.gitignore ==========
@@ -156,14 +155,16 @@ typecheck: ## Run mypy type checking
 	uv run mypy .
 
 # --- CI/CD ---
-ci-check: format-check typecheck test ## Run all CI checks locally (non-mutating)
+# Changed 'test' to 'test-cov' to enforce the 80% coverage gate in CI
+ci-check: format-check typecheck test-cov ## Run all CI checks locally (non-mutating, enforces 80% coverage)
 
 # --- Testing ---
 test: ## Run tests with pytest
 	uv run pytest -v
 
-test-cov: ## Run tests with coverage report (fails if < 80%)
-	uv run pytest --cov --cov-report=term-missing --cov-fail-under=80
+# Removed redundant '--cov-fail-under=80' flag; it is now centrally managed in pyproject.toml
+test-cov: ## Run tests with coverage report (fails if < 80%, see pyproject.toml)
+	uv run pytest --cov --cov-report=term-missing
 
 # --- Execution ---
 # Define default values that can be overridden from the command line
@@ -186,10 +187,14 @@ run-api: ## Run the FastAPI application with hot-reloading
 	uv run uvicorn tpp_mizan.app:app --reload --host 127.0.0.1 --port 8000
 
 # --- Maintenance ---
-clean: ## Clean up caches and virtual environments
-	rm -rf .venv .pytest_cache .mypy_cache .ruff_cache .coverage dist build
+clean: ## Clean up caches and build artifacts (keeps .venv intact)
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage dist build
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	uv cache clean
+
+clean-venv: ## Remove the virtual environment
+	rm -rf .venv
+	@echo "Virtual environment removed. Run 'make install' to recreate it."
 
 deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 	rm -rf logs/
@@ -200,12 +205,12 @@ deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
 # --- Packaging ---
 build: ## Build wheel + sdist
 	uv build
-	
+
 # --- LLM ---
 context: ## Export project source to tpp_mizan.txt for LLM feedback (includes auto-generated tree)
 	@echo "Generating LLM context file..."
 	@echo "========== PROJECT STRUCTURE ==========" > tpp_mizan.txt
-	@tree -I '.venv|.git|logs|.pytest_cache|.mypy_cache|.ruff_cache|dist|build|htmlcov|__pycache__' --dirsfirst >> tpp_mizan.txt 2>/dev/null || echo "(tree command not found, skipping structure map)" >> tpp_mizan.txt
+	@tree -I '.venv|.git|logs|.pytest_cache|.mypy_cache|.ruff_cache|dist|build|htmlcov|__pycache__|tpp_mizan.txt' --dirsfirst >> tpp_mizan.txt 2>/dev/null || echo "(tree command not found, skipping structure map)" >> tpp_mizan.txt
 	@echo "" >> tpp_mizan.txt
 	@find . -type f \
 		\( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "*.yml" \
@@ -220,7 +225,7 @@ context: ## Export project source to tpp_mizan.txt for LLM feedback (includes au
 			echo ""; \
 		done >> tpp_mizan.txt
 	@echo "Done! Saved to tpp_mizan.txt ($$(wc -l < tpp_mizan.txt) lines, $$(du -h tpp_mizan.txt | cut -f1))"
-		
+
 rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app)
 	@if [ -z "$(NEW_NAME)" ] || [ -z "$(NEW_PROJECT)" ]; then \
 		echo "Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app"; exit 1; fi
@@ -239,19 +244,42 @@ rename: ## Rename project (Usage: make rename NEW_NAME=my_app NEW_PROJECT=my-app
 	        p.write_text(p.read_text().replace("tpp_mizan", pkg).replace("tpp-mizan", prj))
 	PY
 	@echo "✅ Rename complete! Run 'make deep-clean && make install' to rebuild."
+========== ./.pre-commit-config.yaml ==========
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        pass_filenames: false
+        args: [.]
+        additional_dependencies:
+          - types-pyyaml
+          - pydantic
+          - typer
+          - fastapi
+          - python-dotenv
 ========== ./pyproject.toml ==========
 [project]
 name = "tpp-mizan"
 version = "0.1.0"
 description = "A production-ready Python template featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by uv"
 readme = "README.md"
-license = { text = "MIT" }
-requires-python = ">=3.13"  # <-- Add this line back!
+license = "MIT" # ← PEP 639: Plain SPDX string
+license-files = [
+    "LICENSE",
+] # ← PEP 639: Explicitly include the license file in the wheel
+requires-python = ">=3.13"
 keywords = ["template", "fastapi", "typer", "uv", "json-logging", "math"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    # "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
@@ -276,7 +304,13 @@ dev = [
     "mypy>=1.13.0",
     "types-pyyaml>=6.0.12.20261103",
     "httpx2>=2.16.0",
+    "pre-commit>=4.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/MohammedElHamraoui/tpp_mizan"
+Repository = "https://github.com/MohammedElHamraoui/tpp_mizan"
+Issues = "https://github.com/MohammedElHamraoui/tpp_mizan/issues"
 
 [project.scripts]
 tpp-mizan = "tpp_mizan.cli:app"
@@ -320,6 +354,8 @@ fail_under = 80 # <-- CI will fail if coverage drops below 80%
 
 ========== ./README.md ==========
 # TPP Mizan
+
+[![CI](https://github.com/MohammedElHamraoui/tpp_mizan/actions/workflows/ci.yml/badge.svg)](https://github.com/MohammedElHamraoui/tpp_mizan/actions/workflows/ci.yml)
 
 A production-ready Python template from Tech Print Pack featuring FastAPI REST API, Typer CLI, and structured JSON logging, managed by `uv`.
 
@@ -424,6 +460,8 @@ def divide_endpoint(x: float, y: float) -> MathResult:
     try:
         return MathResult(operation="divide", x=x, y=y, result=div(x, y))
     except ZeroDivisionError as e:
+        # Added for symmetry with CLI: log client input errors as WARNING
+        logger.warning("API division error: %s", e)
         raise HTTPException(status_code=400, detail=str(e)) from None
 
 ========== ./src/tpp_mizan/cli.py ==========
@@ -520,10 +558,6 @@ def divide_cmd(
         logger.warning("CLI division error: %s", e)
         typer.echo("Error: Division by zero.", err=True)
         raise typer.Exit(code=1) from None
-
-
-if __name__ == "__main__":
-    app()
 
 ========== ./src/tpp_mizan/config/my_log.yaml ==========
 version: 1
@@ -656,7 +690,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     # Reads the version directly from pyproject.toml
     __version__ = version("tpp-mizan")
-except PackageNotFoundError:
+except PackageNotFoundError:  # pragma: no cover
     # Fallback if the package is run directly without being installed
     __version__ = "0.1.0"
 
@@ -843,4 +877,3 @@ def test_cli_help():
     assert "subtract" in result.output
     assert "multiply" in result.output
     assert "divide" in result.output
-
