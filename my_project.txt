@@ -1,0 +1,249 @@
+========== ./Makefile ==========
+# Define phony targets (targets that don't represent files)
+.PHONY: help sync install test lint format run build clean deep-clean context
+
+# Default target
+help: ## Show this help message
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+# --- Dependency Management ---
+sync: ## Create venv, resolve lockfile, and install project
+	uv sync
+
+install: sync ## Ensure project is installed (runs sync)
+	@echo "Project synced and installed successfully."
+
+add: ## Add a new dependency (Usage: make add PKG=requests)
+	uv add $(PKG)
+
+remove: ## Remove a dependency (Usage: make remove PKG=requests)
+	uv remove $(PKG)
+
+lock: ## Update the lockfile without installing to the venv
+	uv lock
+
+# --- Code Quality ---
+format: ## Format code using Ruff
+	uv run ruff format .
+	uv run ruff check --fix .
+
+lint: ## Lint code using Ruff and Mypy
+	uv run ruff check .
+	uv run mypy .
+
+# --- Testing ---
+test: ## Run tests with pytest
+	uv run pytest -v
+
+test-cov: ## Run tests with coverage report
+	uv run pytest --cov --cov-report=term-missing
+
+# --- Execution ---
+run: ## Run the main application
+	uv run python src/main.py
+
+# --- Maintenance ---
+clean: ## Clean up caches and virtual environments
+	rm -rf .venv .pytest_cache .mypy_cache .ruff_cache .coverage dist build
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	uv cache clean
+
+deep-clean: clean ## Nuclear clean: removes logs, context file, and lockfile
+	rm -rf logs/
+	rm -f my_project.txt
+	rm -f uv.lock
+	@echo "Deep clean complete. (Next 'make install' will re-resolve dependencies)"
+
+# --- CI/CD ---
+ci-check: format lint test ## Run all CI checks locally
+
+# --- LLM ---
+context: ## Export project source to my_project.txt for LLM feedback
+	@echo "Generating LLM context file..."
+	@find . -type f \( -name "*.py" -o -name "*.toml" -o -name "*.md" -o -name "*.yaml" -o -name "Makefile" \) \
+		-not -path "./.venv/*" -not -path "./logs/*" -not -path "./.git/*" \
+		| sort | while read -r f; do \
+			echo "========== $$f =========="; \
+			cat "$$f"; \
+			echo ""; \
+		done > my_project.txt
+	@echo "Done! Saved to my_project.txt ($$(wc -l < my_project.txt) lines, $$(du -h my_project.txt | cut -f1))"
+========== ./pyproject.toml ==========
+[project]
+name = "my-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Mohammed El Hamraoui", email = "92893757+MohammedElHamraoui@users.noreply.github.com" },
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.162.0",
+    "python-dotenv>=1.2.4",
+    "python-json-logger>=4.2.0",
+    "pyyaml>=6.0.3",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+my-cli-tool = "my_project.cli:main"
+my-divide = "my_project.main:run"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+========== ./README.md ==========
+
+========== ./src/my_project/app.py ==========
+# src/my_project/app.py
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+========== ./src/my_project/cli.py ==========
+def main():
+    print("Hello from my_test_project CLI!")
+
+
+if __name__ == "__main__":
+    main()
+
+========== ./src/my_project/config/my_log.yaml ==========
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  simple_format:
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_formatter: # Added this because timed_file referenced it
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(message)s"
+  json_formatter:
+    (): pythonjsonlogger.json.JsonFormatter  # <--- The magic class for v4.x
+    format: "%(asctime)s %(name)s %(levelname)s %(message)s %(module)s %(funcName)s %(lineno)d"
+
+handlers:
+  c_handler:
+    level: WARNING
+    formatter: simple_format
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+  json_file:
+    level: DEBUG
+    formatter: json_formatter
+    class: logging.handlers.RotatingFileHandler
+    maxBytes: 10485760  # 10 MB
+    backupCount: 5
+    mode: a
+    encoding: utf8
+    # filename will be injected dynamically by main.py
+  timed_file:
+    formatter: file_formatter
+    class: logging.handlers.TimedRotatingFileHandler
+    filename: logs/my_project_timed.log
+    when: midnight
+    interval: 1  # 1 day
+    backupCount: 30 # 30 days
+    encoding: utf8
+
+loggers:
+  root:
+    level: WARNING  # Keeps external libraries quiet
+  my_project:
+    level: DEBUG    # Will be overridden by LOG_LEVEL env var in main.py
+    handlers: [c_handler, json_file, timed_file]
+    propagate: false # Good practice: stop it from bubbling to root
+========== ./src/my_project/__init__.py ==========
+def main() -> None:
+    print("Hello from my-project!")
+
+========== ./src/my_project/main.py ==========
+import logging
+import logging.config
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+from yaml import safe_load
+
+# 1. Load environment variables from the .env file at project root
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
+
+def configure_loggers():
+    # 1. Get the directory where THIS python file lives (src/my_project/)
+    package_dir = Path(__file__).resolve().parent
+
+    # 2. Point directly to the config folder next to it
+    config_path = package_dir / "config" / "my_log.yaml"
+
+    # 3. Load the YAML
+    with open(config_path) as f:
+        config = safe_load(f)
+
+    # 4. Dynamically set the log file path to a root-level 'logs' folder
+    project_root = package_dir.parent.parent
+    log_dir = project_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)  # Creates 'logs' if it doesn't exist
+
+    # Inject the absolute path into the config
+    config["handlers"]["json_file"]["filename"] = str(log_dir / "my_project.json.log")
+
+    # 5. Dynamically override log level from environment (defaults to DEBUG)
+    env_log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    config["loggers"]["my_project"]["level"] = env_log_level
+
+    # 6. Apply configuration
+    logging.config.dictConfig(config)
+    logger.info(f"Logging configured. Level: {env_log_level}")
+
+
+def main():
+    x = input("What's x? ")
+    if not is_numeric_string(x):
+        logger.warning("%s is not a number", x)
+        return
+
+    y = input("What's y? ")
+    if not is_numeric_string(y):
+        logger.warning("%s is not a number", y)
+        return
+
+    result = div(float(x), float(y))
+    if result is not None:
+        logger.info("Div: %s / %s = %s", x, y, result)
+
+
+def div(x, y):
+    """Divide function"""
+    try:
+        return x / y
+    except ZeroDivisionError:
+        # logger.exception automatically logs the full traceback!
+        logger.exception("A math error occurred: Division by zero!")
+        return None
+
+
+def is_numeric_string(val):
+    try:
+        float(val)
+        return True
+    except ValueError:
+        return False
+
+
+def run():
+    configure_loggers()
+    main()
+

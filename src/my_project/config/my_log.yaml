@@ -1,0 +1,43 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  simple_format:
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_formatter: # Added this because timed_file referenced it
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(message)s"
+  json_formatter:
+    (): pythonjsonlogger.json.JsonFormatter  # <--- The magic class for v4.x
+    format: "%(asctime)s %(name)s %(levelname)s %(message)s %(module)s %(funcName)s %(lineno)d"
+
+handlers:
+  c_handler:
+    level: WARNING
+    formatter: simple_format
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+  json_file:
+    level: DEBUG
+    formatter: json_formatter
+    class: logging.handlers.RotatingFileHandler
+    maxBytes: 10485760  # 10 MB
+    backupCount: 5
+    mode: a
+    encoding: utf8
+    # filename will be injected dynamically by main.py
+  timed_file:
+    formatter: file_formatter
+    class: logging.handlers.TimedRotatingFileHandler
+    filename: logs/my_project_timed.log
+    when: midnight
+    interval: 1  # 1 day
+    backupCount: 30 # 30 days
+    encoding: utf8
+
+loggers:
+  root:
+    level: WARNING  # Keeps external libraries quiet
+  my_project:
+    level: DEBUG    # Will be overridden by LOG_LEVEL env var in main.py
+    handlers: [c_handler, json_file, timed_file]
+    propagate: false # Good practice: stop it from bubbling to root
